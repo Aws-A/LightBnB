@@ -92,15 +92,98 @@ const getAllReservations = function (guest_id, limit = 10) {
  */
 
 const getAllProperties = (options, limit = 10) => {
-  return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then((result) => {
-      console.log(result.rows);
-      return result.rows;
-    })
-    .catch((err) => {
-      console.log(err.message);
-    });
+  const queryParams = [];
+  // 2
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  WHERE 1 = 1
+  `;
+
+  // 3
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += ` AND city LIKE $${queryParams.length}`;
+  }
+
+  if (options.owner_id) {
+    queryParams.push(`${options.owner_id}`);
+    queryString += ` AND owner_id = $${queryParams.length}`;
+  }
+
+  if (options.minimum_price_per_night && options.maximum_price_per_night) {
+    queryParams.push(`${options.minimum_price_per_night}`);
+    queryParams.push(`${options.maximum_price_per_night}`);
+    queryString += ` AND cost_per_night BETWEEN $${queryParams.length -1} AND  $${queryParams.length}`;
+  }
+
+  queryString += ` GROUP BY properties.id `;
+
+  if (options.minimum_rating) {
+    queryParams.push(`${options.minimum_rating}`);
+    queryString += ` HAVING avg(rating) >= $${queryParams.length}`;
+  }
+  // 4
+  queryParams.push(limit);
+  queryString += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  // 5
+  console.log(queryString, queryParams);
+
+  // 6
+  return pool.query(queryString, queryParams).then((res) => res.rows)
+             .catch((err) => {
+                    console.log(err);
+              })
+
+
+    /*SELECT avg(end_date - start_date) as average_duration
+    FROM reservations;
+
+SELECT properties.id, title, cost_per_night, avg(property_reviews.rating) as average_rating
+FROM properties
+LEFT JOIN property_reviews ON properties.id = property_id
+WHERE city LIKE '%ancouv%'
+GROUP BY properties.id
+HAVING avg(property_reviews.rating) >= 4
+ORDER BY cost_per_night
+LIMIT 10;
+
+SELECT properties.city, count(reservations) as total_reservations
+FROM reservations
+JOIN properties ON property_id = properties.id
+GROUP BY properties.city
+ORDER BY total_reservations DESC;
+
+SELECT reservations.id, properties.title, properties.cost_per_night, reservations.start_date, avg(rating) as average_rating
+FROM reservations
+JOIN properties ON reservations.property_id = properties.id
+JOIN property_reviews ON properties.id = property_reviews.property_id
+WHERE reservations.guest_id = 1
+GROUP BY properties.id, reservations.id
+ORDER BY reservations.start_date
+LIMIT 10;
+
+SELECT properties.city, count(reservations) as total_reservations
+FROM reservations
+JOIN properties ON property_id = properties.id
+GROUP BY properties.city
+ORDER BY total_reservations DESC;
+
+SELECT reservations.id, properties.title, properties.cost_per_night, reservations.start_date, avg(rating) as average_rating
+FROM reservations
+JOIN properties ON reservations.property_id = properties.id
+JOIN property_reviews ON properties.id = property_reviews.property_id
+WHERE reservations.guest_id = 1
+GROUP BY properties.id, reservations.id
+ORDER BY reservations.start_date
+LIMIT 10;
+
+    */
 };
 
 /**
